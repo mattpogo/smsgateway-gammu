@@ -11,6 +11,7 @@ import time
 import flask
 import gammu
 import yaml
+from yaml import Loader
 
 app = flask.Flask(__name__)
 sms_queue = multiprocessing.Queue()
@@ -161,7 +162,7 @@ def read_config_file(filename):
     try:
         with open(filename, 'r') as stream:
             try:
-                yaml_config = yaml.load(stream)
+                yaml_config = yaml.load(stream, Loader=Loader)
             except yaml.YAMLError as e:
                 logging.fatal('Configuration file is not a YAML file')
                 return False
