@@ -22,6 +22,7 @@ config = {
     'server': {
         'host': '127.0.0.1',
         'port': 9876,
+        'workers': 2,
     },
     'gammu': {
         'pin': '',
@@ -269,6 +270,6 @@ if __name__ == '__main__':
     flask_app = create_app()
     options = {
         'bind': '%s:%s' % (config['server']['host'], config['server']['port']),
-        'workers': 1,
+        'workers': int(config['server']['workers']),
     }
     StandaloneApplication(flask_app, options).run()
