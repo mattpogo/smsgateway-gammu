@@ -104,7 +104,7 @@ def sms_reader(sm):
         try:
             start = True
             status = sm.GetSMSStatus()
-            remain = status['SIMUsed'] + status['PhoneUsed'] + status['TemplatesUsed']
+            remain = status['SIMUsed']
             while remain > 0:
                 if start:
                     sms = sm.GetNextSMS(Start=True, Folder=0)
@@ -123,7 +123,7 @@ def sms_reader(sm):
             logging.info('Received SMS message from %s' % number)
             read_sms(number, text)
 
-        time.sleep(1)
+        time.sleep(1000)
 
 
 def send_sms(number, text):
@@ -238,9 +238,9 @@ def create_app():
     thread_sender.setDaemon(True)
     thread_sender.start()
 
-    # thread_reader = threading.Thread(target=sms_reader, args=(sm,))
-    # thread_reader.setDaemon(True)
-    # thread_reader.start()
+    thread_reader = threading.Thread(target=sms_reader, args=(sm,))
+    thread_reader.setDaemon(True)
+    thread_reader.start()
  
     logging.info('Ready !')
     return app
@@ -264,8 +264,9 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
 
 if __name__ == '__main__':
+    app = create_app()
     options = {
-        'bind': '%s:%s' % ('0.0.0.0', '8888'),
+        'bind': '%s:%s' % (config['server']['host'], config['server']['port']),
         'workers': 1,
     }
     StandaloneApplication(create_app(), options).run()
