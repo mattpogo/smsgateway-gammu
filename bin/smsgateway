@@ -237,10 +237,11 @@ def main():
     thread_reader = threading.Thread(target=sms_reader, args=(sm,))
     thread_reader.setDaemon(True)
     thread_reader.start()
-
+ 
     logging.info('Ready !')
-    app.run(config['server']['host'], config['server']['port'])
+    return app
 
 
 if __name__ == '__main__':
-    main()
+    main().run(config['server']['host'], config['server']['port'])
+    
