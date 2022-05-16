@@ -193,8 +193,17 @@ def init_gammu():
         sm.ReadConfig()
 
     logging.info('Initializing Gammu state machine')
-    sm.Init()
-
+    try:
+        sm.Init()
+    except gammu.ERR_TIMEOUT:
+        trun_on_hat()
+        try:
+            sm.Init()
+        except:
+            exit(1)
+    except:
+        exit(1)
+        
     status = sm.GetSecurityStatus()
     if status is None:
         logging.info('PIN code is not required or already entered')
@@ -248,6 +257,16 @@ def create_app():
     logging.info('Ready !')
     return app
 
+
+def turn_on_hat():
+    import RPi.GPIO as GPIO
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(7, GPIO.OUT)
+    GPIO.output(7, GPIO.LOW)
+    time.sleep(4)
+    GPIO.output(7, GPIO.HIGH)       
+    GPIO.cleanup()
+    
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
