@@ -196,7 +196,7 @@ def init_gammu():
     try:
         sm.Init()
     except gammu.ERR_TIMEOUT:
-        trun_on_hat()
+        turn_on_hat()
         try:
             sm.Init()
         except:
