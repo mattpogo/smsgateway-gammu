@@ -13,6 +13,8 @@ import gammu
 import yaml
 from yaml import Loader
 
+import gunicorn.app.base
+
 app = flask.Flask(__name__)
 sms_queue = multiprocessing.Queue()
 
@@ -91,6 +93,8 @@ def sms_sender(sm):
             logging.info('Successfully sent SMS message to %s' % data[0])
         except Exception as e:
             logging.error('Error while sending SMS message to %s (%s)' % (data[0], e))
+        
+        time.sleep(1)
 
 
 def sms_reader(sm):
@@ -211,7 +215,7 @@ def init_gammu():
     return sm
 
 
-def main():
+def create_app():
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='[%(asctime)s][%(levelname)s] %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
@@ -234,14 +238,34 @@ def main():
     thread_sender.setDaemon(True)
     thread_sender.start()
 
-    thread_reader = threading.Thread(target=sms_reader, args=(sm,))
-    thread_reader.setDaemon(True)
-    thread_reader.start()
+    # thread_reader = threading.Thread(target=sms_reader, args=(sm,))
+    # thread_reader.setDaemon(True)
+    # thread_reader.start()
  
     logging.info('Ready !')
     return app
 
 
+class StandaloneApplication(gunicorn.app.base.BaseApplication):
+
+    def __init__(self, app, options=None):
+        self.options = options or {}
+        self.application = app
+        super().__init__()
+
+    def load_config(self):
+        config = {key: value for key, value in self.options.items()
+                  if key in self.cfg.settings and value is not None}
+        for key, value in config.items():
+            self.cfg.set(key.lower(), value)
+
+    def load(self):
+        return self.application
+
+
 if __name__ == '__main__':
-    main().run(config['server']['host'], config['server']['port'])
-    
+    options = {
+        'bind': '%s:%s' % ('0.0.0.0', '8888'),
+        'workers': 1,
+    }
+    StandaloneApplication(create_app(), options).run()
