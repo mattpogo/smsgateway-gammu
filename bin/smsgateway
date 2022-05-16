@@ -185,7 +185,7 @@ def read_config_file(filename):
     return True
 
 
-def init_gammu():
+def init_gammu(retry=True):
     sm = gammu.StateMachine()
     if 'config' in config['gammu']:
         sm.SetConfig(0, config['gammu']['config'])
@@ -196,14 +196,15 @@ def init_gammu():
     try:
         sm.Init()
     except gammu.ERR_TIMEOUT:
-        turn_on_hat()
-        try:
-            sm.Init()
-        except:
-            exit(1)
-    except:
-        exit(1)
-        
+        if retry:
+            sm.Abort()
+            del sm
+            logging.error("sm.Init() failed, retrying after turning on hat...")
+            turn_on_hat()
+            return init_gammu(False)
+        else:
+            raise Exception("sm.Init() still fails, exiting.")           
+
     status = sm.GetSecurityStatus()
     if status is None:
         logging.info('PIN code is not required or already entered')
@@ -263,10 +264,11 @@ def turn_on_hat():
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(7, GPIO.OUT)
     GPIO.output(7, GPIO.LOW)
-    time.sleep(4)
-    GPIO.output(7, GPIO.HIGH)       
+    time.sleep(2)
+    GPIO.output(7, GPIO.HIGH)
     GPIO.cleanup()
-    
+    time.sleep(10)
+
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
