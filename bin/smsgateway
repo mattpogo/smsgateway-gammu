@@ -15,21 +15,27 @@ from yaml import Loader
 
 import gunicorn.app.base
 
-app = flask.Flask(__name__)
+
+class ExFlask(flask.Flask):
+    sm = None
+
+
+app = ExFlask(__name__)
 sms_queue = multiprocessing.Queue()
 
 config = {
-    'server': {
-        'host': '127.0.0.1',
-        'port': 9876,
+    'server':            {
+        'host':    '127.0.0.1',
+        'port':    9876,
         'workers': 2,
     },
-    'gammu': {
+    'gammu':             {
         'pin': '',
     },
     'receive_whitelist': [],
-    'send_blacklist': [],
-    'read_sms': False
+    'send_blacklist':    [],
+    'read_sms':          False,
+    'send_async':        False
 }
 
 
@@ -75,11 +81,19 @@ def receive_sms():
             logging.error('Could not read POST data (%s)' % e)
             return json.dumps({'status': 'error', 'message': 'could not read JSON data'}), 500
 
+    errors = []
     for number in numbers:
-        for message in messages:
-            send_sms(number, message)
-
-    return json.dumps({'status': 'ok', 'message': 'messages sent'}), 202
+        for i, message in enumerate(messages):
+            if config['send_async']:
+                send_sms(number, message)
+            else:
+                try:
+                    send_sms_sync(app.sm, number, message)
+                except Exception as e:
+                    errors.append(str(e))
+    if errors:
+        return json.dumps({'status': 'error', 'message': "\n".join(errors)}), 500
+    return json.dumps({'status': 'ok', 'message': 'messages sent'}), 200
 
 
 def sms_sender(sm):
@@ -88,14 +102,14 @@ def sms_sender(sm):
         try:
             sms_message = {
                 'Number': data[0],
-                'Text': data[1],
-                'SMSC': {'Location': 1},
+                'Text':   data[1],
+                'SMSC':   {'Location': 1},
             }
             sm.SendSMS(sms_message)
             logging.info('Successfully sent SMS message to %s' % data[0])
         except Exception as e:
             logging.error('Error while sending SMS message to %s (%s)' % (data[0], e))
-        
+
         time.sleep(0.1)
 
 
@@ -133,6 +147,24 @@ def send_sms(number, text):
         sms_queue.put((number, text))
     else:
         logging.error('Could not sent message to %s, number is blacklisted' % number)
+
+
+def send_sms_sync(sm, number, text):
+    if number not in config['send_blacklist']:
+        try:
+            sms_message = {
+                'Number': number,
+                'Text':   text,
+                'SMSC':   {'Location': 1},
+            }
+            sm.SendSMS(sms_message)
+            logging.info('Successfully sent SMS message to %s' % number)
+        except Exception as e:
+            logging.error('Error while sending SMS message to %s (%s)' % (number, e))
+            raise ValueError('Error while sending SMS message to %s (%s)' % (number, e))
+    else:
+        logging.error('Could not sent message to %s, number is blacklisted' % number)
+        raise ValueError('Could not sent message to %s, number is blacklisted' % number)
 
 
 def read_sms(number, text):
@@ -186,6 +218,7 @@ def read_config_file(filename):
 
 
 def init_gammu(retry=True):
+    # global sm
     sm = gammu.StateMachine()
     if 'config' in config['gammu']:
         sm.SetConfig(0, config['gammu']['config'])
@@ -203,7 +236,7 @@ def init_gammu(retry=True):
             turn_on_hat()
             return init_gammu(False)
         else:
-            raise Exception("sm.Init() still fails, exiting.")           
+            raise Exception("sm.Init() still fails, exiting.")
 
     status = sm.GetSecurityStatus()
     if status is None:
@@ -245,16 +278,18 @@ def create_app():
     sm = init_gammu()
     if sm is None:
         exit(1)
+    app.sm = sm
 
-    thread_sender = threading.Thread(target=sms_sender, args=(sm,))
-    thread_sender.setDaemon(True)
-    thread_sender.start()
+    if config['send_async']:
+        thread_sender = threading.Thread(target=sms_sender, args=(sm,))
+        thread_sender.setDaemon(True)
+        thread_sender.start()
 
     if config['read_sms']:
         thread_reader = threading.Thread(target=sms_reader, args=(sm,))
         thread_reader.setDaemon(True)
         thread_reader.start()
- 
+
     logging.info('Ready !')
     return app
 
@@ -290,7 +325,7 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
 if __name__ == '__main__':
     flask_app = create_app()
     options = {
-        'bind': '%s:%s' % (config['server']['host'], config['server']['port']),
+        'bind':    '%s:%s' % (config['server']['host'], config['server']['port']),
         'workers': int(config['server']['workers']),
     }
     StandaloneApplication(flask_app, options).run()
