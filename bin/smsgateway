@@ -26,6 +26,7 @@ class ExFlask(flask.Flask):
 
 app = ExFlask(__name__)
 sms_queue = multiprocessing.Queue()
+lock = multiprocessing.Lock()
 
 config = {
     'server':            {
@@ -93,7 +94,7 @@ def receive_sms():
             else:
                 try:
                     logging.info(f'acquiring sm lock of {app.id}...')
-                    with app.sm_lock:
+                    with lock:
                         logging.info('sending message...')
                         send_sms_sync(app.sm, number, message)
                         time.sleep(5)
@@ -114,7 +115,8 @@ def sms_sender(sm):
                 'Text':   data[1],
                 'SMSC':   {'Location': 1},
             }
-            sm.SendSMS(sms_message)
+            with lock:
+                sm.SendSMS(sms_message)
             logging.info('Successfully sent SMS message to %s' % data[0])
         except Exception as e:
             logging.error('Error while sending SMS message to %s (%s)' % (data[0], e))
@@ -127,18 +129,19 @@ def sms_reader(sm):
         sms_messages = []
 
         try:
-            start = True
-            status = sm.GetSMSStatus()
-            remain = status['SIMUsed']
-            while remain > 0:
-                if start:
-                    sms = sm.GetNextSMS(Start=True, Folder=0)
-                    start = False
-                else:
-                    sms = sm.GetNextSMS(Location=sms[0]['Location'], Folder=0)
-                sm.DeleteSMS(Location=sms[0]['Location'], Folder=0)
-                remain -= len(sms)
-                sms_messages.append(sms)
+            with lock:
+                start = True
+                status = sm.GetSMSStatus()
+                remain = status['SIMUsed']
+                while remain > 0:
+                    if start:
+                        sms = sm.GetNextSMS(Start=True, Folder=0)
+                        start = False
+                    else:
+                        sms = sm.GetNextSMS(Location=sms[0]['Location'], Folder=0)
+                    sm.DeleteSMS(Location=sms[0]['Location'], Folder=0)
+                    remain -= len(sms)
+                    sms_messages.append(sms)
         except Exception as e:
             logging.critical('Could not read SMS messages (%s)' % e)
 
