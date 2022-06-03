@@ -89,8 +89,11 @@ def receive_sms():
                 send_sms(number, message)
             else:
                 try:
+                    logging.info('acquiring sm lock...')
                     app.sm_lock.acquire()
+                    logging.info('sending message...')
                     send_sms_sync(app.sm, number, message)
+                    logging.info('releasing sm lock...')
                     app.sm_lock.release()
                 except Exception as e:
                     errors.append(str(e))
