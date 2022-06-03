@@ -18,6 +18,7 @@ import gunicorn.app.base
 
 class ExFlask(flask.Flask):
     sm = None
+    sm_lock = threading.Lock()
 
 
 app = ExFlask(__name__)
@@ -88,7 +89,9 @@ def receive_sms():
                 send_sms(number, message)
             else:
                 try:
+                    app.sm_lock.acquire()
                     send_sms_sync(app.sm, number, message)
+                    app.sm_lock.release()
                 except Exception as e:
                     errors.append(str(e))
     if errors:
