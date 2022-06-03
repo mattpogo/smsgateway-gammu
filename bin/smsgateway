@@ -14,11 +14,13 @@ import yaml
 from yaml import Loader
 
 import gunicorn.app.base
-
+import random
 
 class ExFlask(flask.Flask):
     sm = None
     sm_lock = threading.Lock()
+    id = random.random()
+
 
 
 app = ExFlask(__name__)
@@ -89,7 +91,7 @@ def receive_sms():
                 send_sms(number, message)
             else:
                 try:
-                    logging.info('acquiring sm lock...')
+                    logging.info(f'acquiring sm lock of {app.id}...')
                     app.sm_lock.acquire()
                     logging.info('sending message...')
                     send_sms_sync(app.sm, number, message)
@@ -332,6 +334,6 @@ if __name__ == '__main__':
     flask_app = create_app()
     options = {
         'bind':    '%s:%s' % (config['server']['host'], config['server']['port']),
-        'workers': int(config['server']['workers']),
+        'workers': int(config['server']['workers'] if config['send_async'] else 2),
     }
     StandaloneApplication(flask_app, options).run()
