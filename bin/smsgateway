@@ -14,19 +14,15 @@ import yaml
 from yaml import Loader
 
 import gunicorn.app.base
-import random
+
 
 class ExFlask(flask.Flask):
-    def __init__(self, name):
-        super().__init__(name)
-        self.sm_lock = threading.Lock()
-        self.id = random.random()
-        self.sm = None
+    sm = None
 
 
 app = ExFlask(__name__)
 sms_queue = multiprocessing.Queue()
-lock = multiprocessing.Lock()
+sm_lock = multiprocessing.Lock()
 
 config = {
     'server':            {
@@ -94,10 +90,9 @@ def receive_sms():
             else:
                 try:
                     logging.info(f'acquiring sm lock of {app.id}...')
-                    with lock:
+                    with sm_lock:
                         logging.info('sending message...')
                         send_sms_sync(app.sm, number, message)
-                        time.sleep(5)
                 except Exception as e:
                     errors.append(str(e))
 
@@ -115,7 +110,7 @@ def sms_sender(sm):
                 'Text':   data[1],
                 'SMSC':   {'Location': 1},
             }
-            with lock:
+            with sm_lock:
                 sm.SendSMS(sms_message)
             logging.info('Successfully sent SMS message to %s' % data[0])
         except Exception as e:
@@ -129,7 +124,7 @@ def sms_reader(sm):
         sms_messages = []
 
         try:
-            with lock:
+            with sm_lock:
                 start = True
                 status = sm.GetSMSStatus()
                 remain = status['SIMUsed']
@@ -338,6 +333,6 @@ if __name__ == '__main__':
     flask_app = create_app()
     options = {
         'bind':    '%s:%s' % (config['server']['host'], config['server']['port']),
-        'workers': int(config['server']['workers'] if config['send_async'] else 2),
+        'workers': int(config['server']['workers']),
     }
     StandaloneApplication(flask_app, options).run()
