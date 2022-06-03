@@ -93,13 +93,13 @@ def receive_sms():
             else:
                 try:
                     logging.info(f'acquiring sm lock of {app.id}...')
-                    app.sm_lock.acquire()
-                    logging.info('sending message...')
-                    send_sms_sync(app.sm, number, message)
-                    logging.info('releasing sm lock...')
-                    app.sm_lock.release()
+                    with app.sm_lock:
+                        logging.info('sending message...')
+                        send_sms_sync(app.sm, number, message)
+                        time.sleep(5)
                 except Exception as e:
                     errors.append(str(e))
+
     if errors:
         return json.dumps({'status': 'error', 'message': "\n".join(errors)}), 500
     return json.dumps({'status': 'ok', 'message': 'messages sent'}), 200
