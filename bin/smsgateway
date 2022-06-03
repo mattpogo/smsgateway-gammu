@@ -7,6 +7,7 @@ import multiprocessing
 import sys
 import threading
 import time
+import uuid
 
 import flask
 import gammu
@@ -93,8 +94,7 @@ def receive_sms():
                 send_sms(number, message)
             else:
                 try:
-                    with sm_lock:
-                        send_sms_sync(app.sm, number, message)
+                    send_sms_sync(app.sm, number, message)
                 except Exception as e:
                     errors.append(str(e))
 
@@ -107,13 +107,8 @@ def sms_sender(sm, sm_lock):
     while True:
         data = sms_queue.get()
         try:
-            sms_message = {
-                'Number': data[0],
-                'Text':   data[1],
-                'SMSC':   {'Location': 1},
-            }
             with sm_lock:
-                sm.SendSMS(sms_message)
+                sm.SendSMS(prepare_sms_message(data[0], data[1]))
             logging.info('Successfully sent SMS message to %s' % data[0])
         except Exception as e:
             logging.error('Error while sending SMS message to %s (%s)' % (data[0], e))
@@ -161,12 +156,9 @@ def send_sms(number, text):
 def send_sms_sync(sm, number, text):
     if number not in config['send_blacklist']:
         try:
-            sms_message = {
-                'Number': number,
-                'Text':   text,
-                'SMSC':   {'Location': 1},
-            }
-            sm.SendSMS(sms_message)
+            with sm_lock:
+                for msg in prepare_sms_message(number, text):
+                    sm.SendSMS(msg)
             logging.info('Successfully sent SMS message to %s' % number)
         except Exception as e:
             logging.error('Error while sending SMS message to %s (%s)' % (number, e))
@@ -175,6 +167,37 @@ def send_sms_sync(sm, number, text):
         logging.error('Could not sent message to %s, number is blacklisted' % number)
         raise ValueError('Could not sent message to %s, number is blacklisted' % number)
 
+def prepare_sms_message(number, text):
+    if len(text) > 160:
+        # Create SMS info structure
+        smsinfo = {
+            "Class": -1,
+            "Unicode": True,
+            "Entries": [
+                {
+                    "ID":     str(uuid.uuid4()),
+                    "Buffer": text
+                }
+            ],
+        }
+
+        # Encode messages
+        encoded = gammu.EncodeSMS(smsinfo)
+
+        # Send messages
+        for msg in encoded:
+            # Fill in numbers
+            msg["SMSC"] = {"Location": 1}
+            msg["Number"] = number
+
+            # Actually send the message
+            yield msg
+    else:
+        yield {
+                'Number': number,
+                'Text':   text,
+                'SMSC':   {'Location': 1},
+            }
 
 def read_sms(number, text):
     if number in config['receive_whitelist']:
