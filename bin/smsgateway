@@ -17,10 +17,11 @@ import gunicorn.app.base
 import random
 
 class ExFlask(flask.Flask):
-    sm = None
-    sm_lock = threading.Lock()
-    id = random.random()
-
+    def __init__(self, name):
+        super().__init__(name)
+        self.sm_lock = threading.Lock()
+        self.id = random.random()
+        self.sm = None
 
 
 app = ExFlask(__name__)
@@ -92,11 +93,11 @@ def receive_sms():
             else:
                 try:
                     logging.info(f'acquiring sm lock of {app.id}...')
-                    app.sm_lock.acquire()
+                    ExFlask.sm_lock.acquire()
                     logging.info('sending message...')
                     send_sms_sync(app.sm, number, message)
                     logging.info('releasing sm lock...')
-                    app.sm_lock.release()
+                    ExFlask.sm_lock.release()
                 except Exception as e:
                     errors.append(str(e))
     if errors:
