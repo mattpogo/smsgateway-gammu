@@ -93,11 +93,11 @@ def receive_sms():
             else:
                 try:
                     logging.info(f'acquiring sm lock of {app.id}...')
-                    ExFlask.sm_lock.acquire()
+                    app.sm_lock.acquire()
                     logging.info('sending message...')
                     send_sms_sync(app.sm, number, message)
                     logging.info('releasing sm lock...')
-                    ExFlask.sm_lock.release()
+                    app.sm_lock.release()
                 except Exception as e:
                     errors.append(str(e))
     if errors:
