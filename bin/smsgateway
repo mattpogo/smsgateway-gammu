@@ -99,7 +99,7 @@ def receive_sms():
     return json.dumps({'status': 'ok', 'message': 'messages sent'}), 200
 
 
-def sms_sender(sm):
+def sms_sender(sm, sm_lock):
     while True:
         data = sms_queue.get()
         try:
@@ -117,7 +117,7 @@ def sms_sender(sm):
         time.sleep(0.1)
 
 
-def sms_reader(sm):
+def sms_reader(sm, sm_lock):
     while True:
         sms_messages = []
 
@@ -285,13 +285,13 @@ def create_app():
         exit(1)
     app.sm = sm
 
-    if config['send_async']:
-        thread_sender = threading.Thread(target=sms_sender, args=(sm,))
+    if config['send_async'] or config['read_sms']:
+        thread_sender = threading.Thread(target=sms_sender, args=(sm, sm_lock))
         thread_sender.setDaemon(True)
         thread_sender.start()
 
     if config['read_sms']:
-        thread_reader = threading.Thread(target=sms_reader, args=(sm,))
+        thread_reader = threading.Thread(target=sms_reader, args=(sm, sm_lock))
         thread_reader.setDaemon(True)
         thread_reader.start()
 
